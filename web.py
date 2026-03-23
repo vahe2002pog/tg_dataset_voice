@@ -118,6 +118,8 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         th, td {{ padding: 0.7rem 1rem; text-align: left; border-bottom: 1px solid #222; }}
         th {{ color: #888; font-weight: 500; font-size: 0.85rem; text-transform: uppercase; }}
         .time {{ color: #666; font-size: 0.9rem; }}
+        table a {{ color: #7c3aed; text-decoration: none; transition: color 0.2s; }}
+        table a:hover {{ color: #a78bfa; text-decoration: underline; }}
         .btn {{ display: inline-block; background: #7c3aed; color: #fff; padding: 0.8rem 2rem;
                 border-radius: 8px; text-decoration: none; font-weight: 600; transition: background 0.2s; }}
         .btn:hover {{ background: #6d28d9; }}
@@ -182,7 +184,8 @@ async def handle_index(request: web.Request):
 
     rows = ""
     for i, u in enumerate(stats["per_user"], 1):
-        rows += f"<tr><td>{i}</td><td>{u['user_id']}</td><td>{u['samples']}</td><td class='time'>{u['added_at']}</td></tr>"
+        user_id = u['user_id']
+        rows += f"<tr><td>{i}</td><td><a href='/user/{user_id}/files'>{user_id}</a></td><td>{u['samples']}</td><td class='time'>{u['added_at']}</td></tr>"
 
     table = (
         "<table><tr><th>#</th><th>User ID</th><th>Сэмплов</th><th>Последнее добавление</th></tr>" + rows + "</table>"
@@ -226,6 +229,88 @@ async def handle_download(request: web.Request):
     )
 
 
+async def handle_user_files(request: web.Request):
+    if not await is_authenticated(request):
+        raise web.HTTPFound("/login")
+
+    user_id = request.match_info.get("user_id", "")
+    if not user_id:
+        raise web.HTTPFound("/")
+
+    user_dir = DATASET_DIR / user_id
+    if not user_dir.exists():
+        raise web.HTTPFound("/")
+
+    wav_files = sorted(user_dir.glob("*.wav"))
+    files_html = ""
+    for wav_file in wav_files:
+        file_name = wav_file.name
+        file_url = f"/audio/{user_id}/{file_name}"
+        files_html += f"""
+        <div style="background: #1a1a2e; border-radius: 8px; padding: 1rem; margin-bottom: 1rem;">
+            <div style="margin-bottom: 0.5rem; font-weight: 500;">{file_name}</div>
+            <audio controls style="width: 100%; max-width: 400px;">
+                <source src="{file_url}" type="audio/wav">
+                Ваш браузер не поддерживает audio элемент.
+            </audio>
+        </div>
+        """
+
+    html = f"""<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Files — User {user_id}</title>
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+               background: #0f0f0f; color: #e0e0e0; padding: 2rem; }}
+        .container {{ max-width: 700px; margin: 0 auto; }}
+        .header {{ margin-bottom: 2rem; }}
+        .header h1 {{ font-size: 1.5rem; color: #fff; margin-bottom: 0.5rem; }}
+        .back-link {{ color: #888; text-decoration: none; font-size: 0.9rem; }}
+        .back-link:hover {{ color: #7c3aed; }}
+        audio {{ background: #0f0f0f; border-radius: 8px; }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <a class="back-link" href="/">← Назад</a>
+            <h1>Файлы пользователя {user_id}</h1>
+        </div>
+        {files_html if files_html else '<p style="color: #666;">Нет файлов</p>'}
+    </div>
+</body>
+</html>"""
+    return web.Response(text=html, content_type="text/html")
+
+
+async def handle_audio(request: web.Request):
+    if not await is_authenticated(request):
+        raise web.HTTPFound("/login")
+
+    user_id = request.match_info.get("user_id", "")
+    file_name = request.match_info.get("file_name", "")
+
+    if not user_id or not file_name:
+        raise web.HTTPNotFound()
+
+    file_path = DATASET_DIR / user_id / file_name
+
+    # Security check: ensure path is within user directory
+    try:
+        file_path.resolve().relative_to(DATASET_DIR.resolve())
+    except ValueError:
+        raise web.HTTPForbidden()
+
+    if not file_path.exists() or not file_path.is_file():
+        raise web.HTTPNotFound()
+
+    return web.FileResponse(str(file_path))
+
+
 def create_app() -> web.Application:
     # Generate a stable secret key from the password
     secret = hashlib.sha256(WEB_PASSWORD.encode()).digest()
@@ -239,4 +324,6 @@ def create_app() -> web.Application:
     app.router.add_get("/logout", handle_logout)
     app.router.add_get("/", handle_index)
     app.router.add_get("/download", handle_download)
+    app.router.add_get("/user/{user_id}/files", handle_user_files)
+    app.router.add_get("/audio/{user_id}/{file_name}", handle_audio)
     return app

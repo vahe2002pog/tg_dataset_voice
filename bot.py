@@ -276,6 +276,7 @@ async def handle_voice(message: Message):
     total = count_existing_samples(user_dir)
     await message.answer(
         f"Сохранено {len(saved)} сэмплов! Всего у тебя: {total}.\n\n"
+        f"Спасибо за помощь! 🙏 Ваш вклад очень важен для обучения модели.\n\n"
         f"Можешь отправить ещё голосовое с другими интонациями — чем больше данных, тем лучше."
     )
 
