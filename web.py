@@ -277,7 +277,7 @@ async def handle_user_files(request: web.Request):
 <body>
     <div class="container">
         <div class="header">
-            <a class="back-link" href="/">← Назад</a>
+            <a class="back-link" href="/dataset">← Назад</a>
             <h1>Файлы пользователя {user_id}</h1>
         </div>
         {files_html if files_html else '<p style="color: #666;">Нет файлов</p>'}
