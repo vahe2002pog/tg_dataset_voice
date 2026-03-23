@@ -3,7 +3,7 @@ import io
 import os
 import secrets
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import aiohttp_session
@@ -25,6 +25,7 @@ def get_stats() -> dict:
 
     per_user = []
     total = 0
+    tz_plus5 = timezone(timedelta(hours=5))
     for d in sorted(DATASET_DIR.iterdir()):
         if not d.is_dir():
             continue
@@ -34,7 +35,7 @@ def get_stats() -> dict:
             wav_files = list(d.glob("*.wav"))
             if wav_files:
                 latest_mtime = max(f.stat().st_mtime for f in wav_files)
-                latest_time = datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d %H:%M")
+                latest_time = datetime.fromtimestamp(latest_mtime, tz=tz_plus5).strftime("%Y-%m-%d %H:%M")
             else:
                 latest_time = "—"
 
