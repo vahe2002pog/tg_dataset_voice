@@ -8,7 +8,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from dotenv import load_dotenv
 from pydub import AudioSegment
-from pydub.silence import split_on_silence
+from pydub.silence import detect_nonsilent
 
 load_dotenv()
 
@@ -62,16 +62,41 @@ def get_dataset_stats() -> dict:
     }
 
 
-def split_voice(audio_path: Path) -> list[AudioSegment]:
-    """Split a voice message into segments by silence."""
+def split_voice(audio_path: Path, window_ms: int = 200) -> list[AudioSegment]:
+    """Split a voice message into segments by silence and add small window.
+
+    Uses `detect_nonsilent` to get nonsilent ranges (ms) and expands each
+    range by `window_ms` on both sides (clamped to audio bounds). This
+    prevents cutting words at the edges.
+
+    Raises ValueError if audio is longer than 60 seconds.
+    """
     audio = AudioSegment.from_file(audio_path)
 
-    segments = split_on_silence(
+    # Check duration (60 seconds = 60000 ms)
+    if len(audio) > 60000:
+        raise ValueError(f"Audio is too long: {len(audio) // 1000} seconds (max 60)")
+
+    # Parameters tuned for short wake-word repeats
+    min_silence_len = 400
+    silence_thresh = audio.dBFS - 16
+
+    nonsilent = detect_nonsilent(
         audio,
-        min_silence_len=400,
-        silence_thresh=audio.dBFS - 16,
-        keep_silence=100,
+        min_silence_len=min_silence_len,
+        silence_thresh=silence_thresh,
     )
+
+    if not nonsilent:
+        return [audio]
+
+    segments: list[AudioSegment] = []
+    audio_len = len(audio)
+    for start, end in nonsilent:
+        s = max(0, start - window_ms)
+        e = min(audio_len, end + window_ms)
+        segments.append(audio[s:e])
+
     return segments
 
 
@@ -192,12 +217,33 @@ async def handle_voice(message: Message):
     ogg_path = user_dir / "temp.ogg"
     await bot.download_file(file.file_path, destination=ogg_path)
 
+    # Save original voice message
+    try:
+        audio = AudioSegment.from_file(ogg_path)
+        existing = count_existing_samples(user_dir)
+        original_idx = existing + 1
+        original_filename = f"{WAKE_WORD}_original_{original_idx:04d}.wav"
+        original_path = user_dir / original_filename
+        audio.export(original_path, format="wav", parameters=["-ar", "16000", "-ac", "1"])
+        logger.info("Saved original %s for user %s", original_filename, user_id)
+    except Exception as e:
+        logger.error("Failed to save original voice for user %s: %s", user_id, e)
+        await message.answer("Не удалось сохранить исходное голосовое. Попробуй ещё раз.")
+        ogg_path.unlink(missing_ok=True)
+        return
+
     # Split into segments
     try:
         segments = split_voice(ogg_path)
+    except ValueError as e:
+        logger.warning("Voice validation failed for user %s: %s", user_id, e)
+        await message.answer(f"Голосовое сообщение слишком длинное. {str(e)}")
+        ogg_path.unlink(missing_ok=True)
+        return
     except Exception as e:
         logger.error("Failed to split voice for user %s: %s", user_id, e)
         await message.answer("Не удалось обработать голосовое. Попробуй ещё раз.")
+        ogg_path.unlink(missing_ok=True)
         return
     finally:
         ogg_path.unlink(missing_ok=True)

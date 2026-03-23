@@ -3,6 +3,7 @@ import io
 import os
 import secrets
 import zipfile
+from datetime import datetime
 from pathlib import Path
 
 import aiohttp_session
@@ -29,7 +30,15 @@ def get_stats() -> dict:
             continue
         c = count_wav(d)
         if c > 0:
-            per_user.append({"user_id": d.name, "samples": c})
+            # Get the latest modification time from all .wav files
+            wav_files = list(d.glob("*.wav"))
+            if wav_files:
+                latest_mtime = max(f.stat().st_mtime for f in wav_files)
+                latest_time = datetime.fromtimestamp(latest_mtime).strftime("%Y-%m-%d %H:%M")
+            else:
+                latest_time = "—"
+
+            per_user.append({"user_id": d.name, "samples": c, "added_at": latest_time})
             total += c
     return {"total_users": len(per_user), "total_samples": total, "per_user": per_user}
 
@@ -107,6 +116,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
         table {{ width: 100%; border-collapse: collapse; margin-bottom: 2rem; }}
         th, td {{ padding: 0.7rem 1rem; text-align: left; border-bottom: 1px solid #222; }}
         th {{ color: #888; font-weight: 500; font-size: 0.85rem; text-transform: uppercase; }}
+        .time {{ color: #666; font-size: 0.9rem; }}
         .btn {{ display: inline-block; background: #7c3aed; color: #fff; padding: 0.8rem 2rem;
                 border-radius: 8px; text-decoration: none; font-weight: 600; transition: background 0.2s; }}
         .btn:hover {{ background: #6d28d9; }}
@@ -171,10 +181,10 @@ async def handle_index(request: web.Request):
 
     rows = ""
     for i, u in enumerate(stats["per_user"], 1):
-        rows += f"<tr><td>{i}</td><td>{u['user_id']}</td><td>{u['samples']}</td></tr>"
+        rows += f"<tr><td>{i}</td><td>{u['user_id']}</td><td>{u['samples']}</td><td class='time'>{u['added_at']}</td></tr>"
 
     table = (
-        "<table><tr><th>#</th><th>User ID</th><th>Сэмплов</th></tr>" + rows + "</table>"
+        "<table><tr><th>#</th><th>User ID</th><th>Сэмплов</th><th>Последнее добавление</th></tr>" + rows + "</table>"
         if rows
         else '<p class="empty">Пока нет записей</p>'
     )
