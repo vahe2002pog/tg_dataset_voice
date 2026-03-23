@@ -138,7 +138,7 @@ DASHBOARD_TEMPLATE = """<!DOCTYPE html>
 
 async def handle_login_page(request: web.Request):
     if await is_authenticated(request):
-        raise web.HTTPFound("/")
+        raise web.HTTPFound("/dataset")
     html = LOGIN_PAGE.replace("{error}", "")
     return web.Response(text=html, content_type="text/html")
 
@@ -151,7 +151,7 @@ async def handle_login(request: web.Request):
     if login == WEB_LOGIN and password == WEB_PASSWORD:
         session = await aiohttp_session.get_session(request)
         session["authenticated"] = True
-        raise web.HTTPFound("/")
+        raise web.HTTPFound("/dataset")
 
     html = LOGIN_PAGE.replace("{error}", '<p class="error">Неверный логин или пароль</p>')
     return web.Response(text=html, content_type="text/html")
