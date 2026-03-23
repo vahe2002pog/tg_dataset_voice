@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip list:*)",
+      "Bash(pip install:*)",
+      "Bash(ffmpeg -version)",
+      "Bash(python -c \"from pydub import AudioSegment; print\\(''OK''\\)\")",
+      "Bash(python -c \"import audioop; print\\(''ok''\\)\")",
+      "Bash(python -c \"import pyaudioop; print\\(''ok''\\)\")",
+      "Bash(python 2)",
+      "Bash(1:*)",
+      "Bash(python -c \"import audioop\")",
+      "Bash(pip show:*)",
+      "Bash(python -c \"import pydub.utils; print\\(pydub.utils.__file__\\)\")",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(.venv/Scripts/python -c \"from pydub import AudioSegment; print\\(''OK''\\)\")"
+    ]
+  }
+}
